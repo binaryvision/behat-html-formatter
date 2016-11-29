@@ -6,6 +6,8 @@
 
 namespace lopezs\BehatHTMLFormatter\Renderer;
 
+use Behat\Gherkin\Node\TableNode;
+
 class Behat2Renderer implements RendererInterface {
 
     /**
@@ -20,6 +22,7 @@ class Behat2Renderer implements RendererInterface {
         <html xmlns ='http://www.w3.org/1999/xhtml'>
         <head>
             <meta http-equiv='Content-Type' content='text/html;charset=utf-8'/>
+            <link rel=\"stylesheet\" type=\"text/css\" href=\"//fonts.googleapis.com/css?family=Open+Sans\" />
             <title>Behat Test Suite</title> ".$this->getCSS()."
         </head>
         <body>
@@ -302,65 +305,113 @@ class Behat2Renderer implements RendererInterface {
     }
 
     /**
+     * Renders TableNode arguments.
+     *
+     * @param TableNode $table
+     * @return string  : HTML generated
+     */
+    public function renderTableNode(TableNode $table){
+        $arguments = '<table class="argument"> <thead>';
+        $header = $table->getRow(0);
+        $arguments .= $this->preintTableRows($header);
+
+        $arguments .= '</thead><tbody>';
+        foreach ($table->getHash() as $row) {
+            $arguments .= $this->preintTableRows($row);
+        }
+
+        $arguments .= '</tbody></table>';
+        return $arguments;
+    }
+
+    /**
+     * Renders table rows.
+     *
+     * @param array $row
+     * @return string  : HTML generated
+     */
+    public function preintTableRows($row){
+        $return = '<tr class="row">';
+        foreach ($row as $column) {
+            $return .= '<td>' . htmlentities($column) . '</td>';
+        }
+        $return .= '</tr>';
+        return $return;
+    }
+
+    /**
      * Renders after a step.
      * @param object : BehatHTMLFormatter object
      * @return string  : HTML generated
      */
-    public function renderAfterStep($obj)
-    {
-        $feature = $obj->getCurrentFeature();
-        $scenario = $obj->getCurrentScenario();
+    public function renderAfterStep($obj) {
+      $feature  = $obj->getCurrentFeature();
+      $scenario = $obj->getCurrentScenario();
 
-        $steps = $scenario->getSteps();
-        $step = end($steps); //needed because of strict standards
+      $steps = $scenario->getSteps();
+      $step  = end($steps); //needed because of strict standards
 
-        //path displayed only if available (it's not available in undefined steps)
-        $strPath = '';
-        if($step->getDefinition() !== null) {
-            $strPath = $step->getDefinition()->getPath();
-        }
+      //path displayed only if available (it's not available in undefined steps)
+      $strPath = '';
+      if ($step->getDefinition() !== NULL) {
+        $strPath = $step->getDefinition()->getPath();
+      }
 
-        $stepResultClass = '';
-        if($step->isPassed()) {
-            $stepResultClass = 'passed';
-        }
-        if($step->isFailed()) {
-            $stepResultClass = 'failed';
-        }
-        if($step->isSkipped()) {
-            $stepResultClass = 'skipped';
-        }
-        if($step->isPending()) {
-            $stepResultClass = 'pending';
-        }
+      $stepResultClass = '';
+      if ($step->isPassed()) {
+        $stepResultClass = 'passed';
+      }
+      if ($step->isFailed()) {
+        $stepResultClass = 'failed';
+      }
+      if ($step->isSkipped()) {
+        $stepResultClass = 'skipped';
+      }
+      if ($step->isPending()) {
+        $stepResultClass = 'pending';
+      }
 
-        $print = '
-                    <li class="'.$stepResultClass.'">
+      $arguments    = '';
+      $argumentType = $step->getArgumentType();
+
+      if ($argumentType == "PyString") {
+        $arguments = '<br><pre class="argument">' . htmlentities($step->getArguments()) . '</pre>';
+      }
+
+      if ($argumentType == 'Table') {
+        $arguments = '<br><pre class="argument">' . $this->renderTableNode($step->getArguments()) . '</pre>';
+      }
+
+      $print     = '
+                    <li class="' . $stepResultClass . '">
                         <div class="step">
-                            <span class="keyword">'.$step->getKeyWord().' </span>
-                            <span class="text">'.htmlentities($step->getText()).' </span>
-                            <span class="path">'.$strPath.'</span>
+                            <span class="keyword">' . $step->getKeyWord() . ' </span>
+                            <span class="text">' . htmlentities($step->getText()) . ' </span>
+                            <span class="path">' . $strPath . '</span>'
+                   . $arguments . '
                         </div>';
-        $exception = $step->getException();
-        if(!empty($exception)) {
-            $relativeScreenshotPath = 'assets/screenshots/' . $feature->getScreenshotFolder() . '/' . $scenario->getScreenshotName();
-            $fullScreenshotPath = $obj->getBasePath() . '/results/html/' . $relativeScreenshotPath;
-            $print .= '
-                        <pre class="backtrace">'.$step->getException().'</pre>';
-            if(file_exists($fullScreenshotPath))
-            {
-                //$print .= '<a href="' . $relativeScreenshotPath . '">Screenshot</a>';
-
-                $print .= '<div class="screenshot">';
-                $print .= '<h4>Screenshot</h4>';
-                $print .= '<img class="screenshot" style="width:100%;max-width:800px;display: block;height:auto;" src="' . $relativeScreenshotPath . '" />';
-                $print .= '</div>';
-            }
+      $exception = $step->getException();
+      if (!empty($exception)) {
+        $relativeScreenshotPath = 'assets/screenshots/' . $feature->getScreenshotFolder() . '/' . $scenario->getScreenshotName();
+        $fullScreenshotPath     = $obj->getOutputPath() . '/' . $relativeScreenshotPath;
+        $print .= '
+                        <pre class="backtrace">' . $step->getException() . '</pre>';
+        if (file_exists($fullScreenshotPath)) {
+          if ($obj->getEmbedScreenshot()) {
+            $print .= '<div class="screenshot">';
+            $print .= '<h4>Screenshot</h4>';
+            $print .= '<img class="screenshot" style="width:100%;max-width:800px;display: block;height:auto;" src="' . $relativeScreenshotPath . '" />';
+            $print .= '</div>';
+          }
+          else {
+            $print .= '<a href="' . $relativeScreenshotPath . '">Screenshot</a>';
+          }
         }
         $print .= '
                     </li>';
-
+      }
         return $print;
+
     }
 
     /**
@@ -376,13 +427,17 @@ class Behat2Renderer implements RendererInterface {
                     padding:0px;
                     position:relative;
                     padding-top:93px;
+                    font-family: 'Open Sans', Sans-Serif;                    
                 }
                 #behat {
                     float:left;
-                    font-family: Georgia, serif;
                     font-size:18px;
                     line-height:26px;
                     width:100%;
+                }
+                #behat div.step,
+                #behat div.featureResult {
+                    padding: 5px;
                 }
                 #behat .statistics {
                     float:left;
@@ -406,13 +461,10 @@ class Behat2Renderer implements RendererInterface {
                 }
                 #behat .feature {
                     margin:15px;
-                    padding-bottom: 10px;
-                    border-bottom: 1px dotted darkgrey;
                 }
                 #behat h2, #behat h3, #behat h4 {
                     margin:0px 0px 5px 0px;
                     padding:0px;
-                    font-family:Georgia;
                 }
                 #behat h2 .title, #behat h3 .title, #behat h4 .title {
                     font-weight:normal;
@@ -420,7 +472,7 @@ class Behat2Renderer implements RendererInterface {
                 #behat .path {
                     font-size:10px;
                     font-weight:normal;
-                    font-family: 'Bitstream Vera Sans Mono', 'DejaVu Sans Mono', Monaco, Courier, monospace !important;
+                    font-family: monospace !important;
                     color:#999;
                     padding:0px 5px;
                     float:right;
@@ -488,8 +540,8 @@ class Behat2Renderer implements RendererInterface {
                 #behat .scenario > ol li .argument,
                 #behat .scenario .examples > ol li .argument {
                     margin:10px 20px;
-                    font-size:16px;
-                    overflow:hidden;
+                    font-size:14px;
+                    overflow:auto;
                 }
                 #behat .scenario > ol li table.argument,
                 #behat .scenario .examples > ol li table.argument {
@@ -551,7 +603,7 @@ class Behat2Renderer implements RendererInterface {
                     font-size:12px;
                     line-height:18px;
                     color:#000;
-                    overflow:hidden;
+                    overflow:auto;
                     margin-left:20px;
                     padding:15px;
                     border-left:2px solid #C20000;
@@ -583,7 +635,6 @@ class Behat2Renderer implements RendererInterface {
                     top: 0px;
                     left: 0px;
                     width:100%;
-                    font-family: Arial, sans-serif;
                     font-size: 14px;
                     line-height: 18px;
                 }
@@ -631,25 +682,18 @@ class Behat2Renderer implements RendererInterface {
                     display:block;
                 }
                 #behat .jq-toggle > h2,
-                #behat .jq-toggle > h3,
-                #behat .jq-toggle > h4 {
+                #behat .jq-toggle > h3 {
                     cursor:pointer;
                 }
                 #behat .jq-toggle > h2:after,
-                #behat .jq-toggle > h3:after,
-                #behat .jq-toggle > h4:after {
+                #behat .jq-toggle > h3:after {
                     content:' |+';
                     font-weight:bold;
                 }
                 #behat .jq-toggle-opened > h2:after,
-                #behat .jq-toggle-opened > h3:after,
-                #behat .jq-toggle-opened > h4:after {
+                #behat .jq-toggle-opened > h3:after {
                     content:' |-';
                     font-weight:bold;
-                }
-                
-                #behat div.featureResult {
-                  padding:5px;                
                 }
             </style>
 
@@ -735,8 +779,6 @@ class Behat2Renderer implements RendererInterface {
                     $('#behat .feature').removeClass('jq-toggle-opened');
                     $('#behat .scenario').removeClass('jq-toggle-opened');
                 });
-                
-
 
                 $('#behat .summary .counters .scenarios .passed')
                     .addClass('switcher')
@@ -810,8 +852,6 @@ class Behat2Renderer implements RendererInterface {
                         scenario.addClass('jq-toggle-opened');
                         feature.addClass('jq-toggle-opened');
                     });
-                    
-                    
             });
         </script>";
 

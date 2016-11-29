@@ -16,7 +16,6 @@ use Behat\Testwork\EventDispatcher\Event\AfterExerciseCompleted;
 use Behat\Testwork\EventDispatcher\Event\AfterSuiteTested;
 use Behat\Testwork\EventDispatcher\Event\BeforeExerciseCompleted;
 use Behat\Testwork\EventDispatcher\Event\BeforeSuiteTested;
-use Behat\Testwork\Output\Exception\BadOutputPathException;
 use Behat\Testwork\Output\Formatter;
 use Behat\Testwork\Output\Printer\OutputPrinter;
 use lopezs\BehatHTMLFormatter\Classes\Feature;
@@ -94,6 +93,12 @@ class BehatHTMLFormatter implements Formatter {
     private $loop_break;
 
     /**
+     * Flag used by this Formatter
+     * @param $embed_screenshot boolean
+     */
+    private $embed_screenshot;
+
+    /**
      * @var Array
      */
     private $suites;
@@ -165,13 +170,14 @@ class BehatHTMLFormatter implements Formatter {
      * @param $name
      * @param $base_path
      */
-    function __construct($name, $renderer, $filename, $print_args, $print_outp, $loop_break, $base_path)
+    function __construct($name, $renderer, $filename, $print_args, $print_outp, $loop_break, $base_path, $embed_screenshot)
     {
         $this->name = $name;
         $this->base_path = $base_path;
         $this->print_args = $print_args;
         $this->print_outp = $print_outp;
         $this->loop_break = $loop_break;
+        $this->embed_screenshot = $embed_screenshot;
         $this->renderer = new BaseRenderer($renderer, $base_path);
         $this->printer = new FileOutputPrinter($this->renderer->getNameList(), $filename, $base_path);
         $this->timer = new Timer();
@@ -255,45 +261,12 @@ class BehatHTMLFormatter implements Formatter {
     }
 
     /**
-     * Verify that the specified output path exists or can be created,
-     * then sets the output path.
-     * @param String $path Output path relative to %paths.base%
-     * @throws BadOutputPathException
-     */
-    public function setOutputPath($path)
-    {
-        $outpath = realpath($this->base_path.DIRECTORY_SEPARATOR.$path);
-        if(!file_exists($outpath)) {
-            if(!mkdir($outpath, 0755, true)) {
-                throw new BadOutputPathException(
-                    sprintf(
-                        'Output path %s does not exist and could not be created!',
-                        $outpath
-                    ),
-                    $outpath
-                );
-            }
-        } else {
-            if(!is_dir($outpath)) {
-                throw new BadOutputPathException(
-                    sprintf(
-                        'The argument to `output` is expected to the a directory, but got %s!',
-                        $outpath
-                    ),
-                    $outpath
-                );
-            }
-        }
-        $this->outputPath = $outpath;
-    }
-
-    /**
      * Returns output path
      * @return String output path
      */
     public function getOutputPath()
     {
-        return $this->outputPath;
+        return $this->printer->getOutputPath();
     }
 
     /**
@@ -321,6 +294,15 @@ class BehatHTMLFormatter implements Formatter {
     public function getPrintLoopBreak()
     {
         return $this->loop_break;
+    }
+
+    /**
+     * Returns if it should embed screenshot or just show link
+     * @return boolean
+     */
+    public function getEmbedScreenshot()
+    {
+        return $this->embed_screenshot;
     }
 
     public function getTimer()
@@ -574,15 +556,19 @@ class BehatHTMLFormatter implements Formatter {
     {
         $result = $event->getTestResult();
 
-        //$this->dumpObj($event->getStep()->getArguments());
         /** @var Step $step */
         $step = new Step();
         $step->setKeyword($event->getStep()->getKeyword());
         $step->setText($event->getStep()->getText());
         $step->setLine($event->getStep()->getLine());
-        $step->setArguments($event->getStep()->getArguments());
         $step->setResult($result);
         $step->setResultCode($result->getResultCode());
+
+        if ($event->getStep()->hasArguments()){
+            $object = $this->getObject($event->getStep()->getArguments());
+            $step->setArgumentType($object->getNodeType());
+            $step->setArguments($object);
+        }
 
         //What is the result of this step ?
         if(is_a($result, 'Behat\Behat\Tester\Result\UndefinedStepResult')) {
@@ -618,21 +604,11 @@ class BehatHTMLFormatter implements Formatter {
     //</editor-fold>
 
     /**
-     * @param $text
+     * @param $arguments
      */
-    public function printText($text)
-    {
-        file_put_contents('php://stdout', $text);
-    }
-
-    /**
-     * @param $obj
-     */
-    public function dumpObj($obj)
-    {
-        ob_start();
-        var_dump($obj);
-        $result = ob_get_clean();
-        $this->printText($result);
+    public function getObject($arguments){
+        foreach ($arguments as $argument => $args){
+            return $args;
+        }
     }
 }
